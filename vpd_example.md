@@ -44,7 +44,7 @@ grant connect to insa_ev;
 ```sql
 conn insa/insa
 
-create table gun_code_t(gun_code varchar2(10), gun_name varchar2(10), gun_id varchar2(30));
+create table gun_code_t(gun_code varchar2(10) unique, gun_name varchar2(10), gun_id varchar2(30));
 insert into gun_code_t values('1','육군','INSA_ARMY');
 Insert into gun_code_t values('2','해군','INSA_NAVY');
 insert into gun_code_t values('3','공군','INSA_AF');
@@ -130,7 +130,7 @@ conn insa/insa
 
 exec bms_rls.add_policy(object_schema=>'insa',object_name=>'sosok_t',policy_name=>'gun_policy',
 function_schema=>'insa',policy_function=>'vpd_get_users',
-statement_types=>‘SELECT, UPDATE, INSERT, DELETE',
+statement_types=>'SELECT,UPDATE,INSERT,DELETE',
 policy_type=>DBMS_RLS.CONTEXT_SENSITIVE,
 namespace=>'users_ctx',attribute=>'gun_code',
 update_check=>TRUE, enable=>TRUE);
