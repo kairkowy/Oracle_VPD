@@ -1,0 +1,626 @@
+** 오라클 Secirity(VPD) 기능 실습 예제
+
+1. VPD 실습 계정 만들기
+ 
+1.1 데이터 owner 계정 만들기
+
+ VPD 실습을 위한 DB 계정은 "HANDSON"이며, password는 "HANDSON" 입니다. 
+ VPD 운영에 필요한 기본 권한은 CREATE SESSION, CREATE ANY CONTEXT, CREATE PROCEDURE, CREATE TRIGGER, ADMINISTER DATABASE TRIGGER, EXEMPT ACCERSS POLICY과 EXEXUTE on dbms_session, EXECUTE on DBMS_RLS입니다.
+ 아래 스크립트를 이용하여 데이터 owner 계정 및 권한을 부여합니다.
+
+ 
+sqlplus / as sysdba
+
+create user handson identified by handson default tablespace users quota unlimited on users;
+grant connect, resource to handson;
+GRANT CREATE SESSION, CREATE ANY CONTEXT, CREATE PROCEDURE, CREATE TRIGGER, ADMINISTER DATABASE TRIGGER TO handson;
+GRANT EXECUTE ON DBMS_SESSION TO handson;
+GRANT EXECUTE ON DBMS_RLS TO handson;
+-- GRANT EXEMPT ACCESS POLICY TO handson;
+
+1.2 Application 계정 만들기
+
+VPD 실습에 사용되는 Application 계정은 ADMINAR, ADMINARMC, ADMINARNIL, ADMINNV, ADMINAF 등 5개의 DB 계정을 사용합니다. 아래 스크립트를 이용하여 DB 계정을 생성합니다.
+
+
+sqlplus / as sysdba
+
+create user adminar identified by welcome1 default tablespace users;
+grant connect to adminar;
+
+create user adminarmil identified by welcome1 default tablespace users;
+grant connect to adminarmil;
+
+create user adminarmc identified by welcome1 default tablespace users;
+grant connect to adminarmc;
+
+create user adminnv identified by welcome1 default tablespace users;
+grant connect to adminnv;
+
+create user adminaf identified by welcome1 default tablespace users;
+grant connect to adminaf;
+
+
+아래 쿼리를 이용하여 생성된 DB 계정 정보를 확인 합니다.
+
+set line 150
+col username format a20
+col account_status format a10
+
+select username, account_status, created from dba_users;
+
+~~~~~~ 생략
+
+
+2. 실습 데이터를 위한 테이블 만들기
+
+conn handson/handson
+
+create table evaluate_t (
+empno varchar2(12) not null,
+fst_ev_grade varchar2(2),
+snd_ev_grade varchar2(2),
+fin_ev_grade varchar2(2),
+emp_sosok_cd  varchar2(4) not null,
+emp_sb_cd varchar2(6) not null);
+
+create table account_t (
+acct_id varchar2(20) not null,
+data_zone varchar2(20) not null,
+sosok varchar2(20),
+sosok_br varchar(20),
+s_role varchar2(20));
+
+create table emp_hist_t (
+empno varchar2(12) not null,
+promoted_date varchar2(10),
+emp_sosok_cd  varchar2(4) not null,
+emp_sb_cd varchar2(6) not null)
+);
+
+col table_name format a30
+
+select table_name, status from user_tables where table_name in ('EVALUATE_T','ACCOUNT_T');
+~~~ 생략
+
+
+
+2.2 테이블 액세스 권한 부여
+
+위에서 만든 테이블 및 데이터를 사용하기 위해 각가의 Application 계정에게 SELECT, INSERT, UPDATE, DELETE 권한을 부여합니다.
+
+conn handson/handson
+
+grant select, insert, update, delete on account_t to adminar, adminarmil, adminarmc, adminnv, adminaf;
+
+grant select, insert, update, delete on evaluate_t to adminar, adminarmil, adminarmc, adminnv, adminaf;
+
+
+2.1 실습 데이터 데이터 로딩
+
+VPD 실습을 위해 별도 제공되는 쉘스크립트와 가상데이터를 사용하여 위에서 만든 테이블에 데이터를 입력합니다. 데이터 로딩 툴은 SQL*LOADER를 사용합니다.
+별도 제공되는 쉘스크립트와 가상데이터 목록은 다음과 같습니다.
+
+account_dataset4vpd.dat  
+evaluate_dataset.dat
+load_acc.ctl
+load_acc.sh
+load_evl.ctl
+load_evl.sh
+
+데이터 로딩을 마쳤으면 아래와 같이 데이터를 조회합니다.
+
+sqlplus handson/handson
+col acct_id format a20
+col data_zone format a20
+
+SQL> select acct_id, data_zone from account_t;
+
+ACCT_ID              DATA_ZONE
+-------------------- ----------
+ADMINAR              AR
+ADMINARMC            ARMC
+ADMINARAD            ARMIL
+ADMINNV              NV
+ADMINAF              AF
+
+SQL> select * from evaluate_t;
+
+EMPNO        FST_EV SND_EV FIN_EV EMP_SOSOK_CD EMP_SB_CD
+------------ ------ ------ ------ ------------ ------------------
+21-10011     4      4             AR           MIL
+21-10102     1      2      2      AR           MIL
+21-10203     2      2      2      AR           MIL
+21-10044     3      3      2      AR           MC
+21-15005     3      3      3      AR           MIL
+21-10106     1      5             AR           MC
+21-10307     2      1      1      AR           MIL
+21-10038     2      2      2      AR           MIL
+21-10009     1      2      2      AR           MIL
+21-11010     2      3      3      AR           MIL
+21-20301     4      4             NV           MIL
+21-20002     2      2      2      NV           MIL
+21-20343     1      2      2      NV           MIL
+21-20104     2      2      2      NV           MIL
+21-20235     4      3      3      NV           MC
+21-21106     1      1             NV           MIL
+21-20207     1      2      1      NV           MIL
+21-21008     2      2      2      NV           MC
+21-20459     1      2      2      NV           MIL
+21-20210     2      3      3      NV           MIL
+21-30001     1      2      2      AF           MIL
+21-31102     2      2      2      AF           MIL
+21-33203     2      2      2      AF           MIL
+21-30004     2      3             AF           MC
+21-30905     2      1      1      AF           MIL
+21-30806     1      2             AF           MIL
+21-30047     2      2      2      AF           MC
+21-30078     3      2      2      AF           MIL
+21-30309     3      3      3      AF           MIL
+21-30010     2      2      2      AF           MIL
+
+
+select emp_sosok_cd, count(*) from evaluate_t group by emp_sosok_cd;
+EMP_MIL_CD     COUNT(*)
+------------ ----------
+AR                   10
+NV                   10
+AF                   10
+
+
+conn adminarmil/welcome1
+
+SQL> column empno format a12
+SQL> select * from handson.evaluate_t ;
+
+EMPNO        FST_EV SND_EV FIN_EV EMP_SOSOK_CD EMP_SB_CD
+------------ ------ ------ ------ ------------ ------------------
+21-10011     4      4             AR           MIL
+21-10102     1      2      2      AR           MIL
+21-10203     2      2      2      AR           MIL
+21-10044     3      3      2      AR           MC
+21-15005     3      3      3      AR           MIL
+21-10106     1      5             AR           MC
+21-10307     2      1      1      AR           MIL
+21-10038     2      2      2      AR           MIL
+21-10009     1      2      2      AR           MIL
+21-11010     2      3      3      AR           MIL
+21-20301     4      4             NV           MIL
+21-20002     2      2      2      NV           MIL
+21-20343     1      2      2      NV           MIL
+21-20104     2      2      2      NV           MIL
+21-20235     4      3      3      NV           MC
+21-21106     1      1             NV           MIL
+21-20207     1      2      1      NV           MIL
+21-21008     2      2      2      NV           MC
+21-20459     1      2      2      NV           MIL
+21-20210     2      3      3      NV           MIL
+21-30001     1      2      2      AF           MIL
+21-31102     2      2      2      AF           MIL
+21-33203     2      2      2      AF           MIL
+21-30004     2      3             AF           MC
+21-30905     2      1      1      AF           MIL
+21-30806     1      2             AF           MIL
+21-30047     2      2      2      AF           MC
+21-30078     3      2      2      AF           MIL
+21-30309     3      3      3      AF           MIL
+21-30010     2      2      2      AF           MIL
+
+30 행이 선택되었습니다.
+
+
+
+똑 같은 방법으로 adminaf, adminnv 등의 다른 계정으로 로그인 하여 evaluate_t 테이블의 데이터가 조회되는지 확인 합니다.
+
+2.3 사용자 세션 기반의 Application Context 생성
+
+Oracle Database는 “Application Context”를 사용하여 데이터베이스 및 비데이터베이스 사용자에 대한 정보를 얻을 수 있습니다. 이 정보를 이용하여 Application 및 SQL*PLUS와 같은 DB 액세스 툴을 통해 데이터에 액세스 하는 것을 허용하거나 통제가 가능합니다.
+아래와 같이 Application context 를 위한 작업을 수행합니다. 
+Application 계정이 DB에 로그인 할 때 Application Context에 사용할 사용자 세션 정보를 강제 적용하도록 합니다. 이 정보는 Application 계정이 수정을 못하도록 DB 커널에서 강제됩니다.
+
+conn adminar/welcome1
+
+col dbuser format a20
+select SYS_CONTEXT('USERENV', 'SESSION_USER') dbuser from dual;
+
+DBUSER
+--------------------
+ADMINAR
+
+conn handson/handson
+
+CREATE OR REPLACE CONTEXT datazone_ctx USING datazone_ctx_pkg;
+
+CREATE OR REPLACE PACKAGE datazone_ctx_pkg IS 
+  PROCEDURE set_datazone;
+ END;
+/
+CREATE OR REPLACE PACKAGE BODY datazone_ctx_pkg IS
+  PROCEDURE set_datazone
+  AS
+    datazone varchar2(20);
+  BEGIN
+     SELECT data_zone INTO datazone FROM handson.account_t
+        WHERE acct_id = SYS_CONTEXT('USERENV', 'SESSION_USER');
+        DBMS_SESSION.SET_CONTEXT('datazone_ctx', 'data_zone', datazone);
+  EXCEPTION
+   WHEN NO_DATA_FOUND THEN NULL;
+  END set_datazone;
+END;
+/
+
+CREATE or REPLACE TRIGGER set_datazone_ctx_trig AFTER LOGON ON DATABASE
+ BEGIN
+    handson.datazone_ctx_pkg.set_datazone;
+  EXCEPTION
+  WHEN OTHERS THEN
+   RAISE_APPLICATION_ERROR(
+    -20000, 'Trigger handson.datazone_ctx_pkg.set_datazone violation. Login denied.');
+ END;
+/
+
+Appplication context 정보 테스트
+conn adminar/welcome1
+
+SELECT SYS_CONTEXT('datazone_ctx', 'data_zone') DBzone FROM DUAL;
+
+DBZONE
+--------------------------------------------------------------------------------
+AR
+
+2.6 Policy Function 및 Policy 생성
+
+VPD의 핵싴 컴포넌트는 Policy Function과 Ploicy 입니다. Polic Function은 동적 WHEWE 절을 강제 적용하도록 제어하는 함수이며, 
+Policy는 Policy Function을 타겟 객체에 적용(attathc)하기 위한 security 기능입니다. 
+
+
+2.6.1 Function 생성
+conn handson/handson
+
+==============================================================
+
+CREATE OR REPLACE FUNCTION vpd_get_datazone(
+  schema_p   IN VARCHAR2,
+  table_p    IN VARCHAR2)
+ RETURN VARCHAR2
+ AS
+  users_pred VARCHAR2 (400);
+ BEGIN
+ 	  users_pred := 'emp_sosok_cd = SYS_CONTEXT(''datazone_ctx'', ''data_zone'')'; 
+ RETURN users_pred;
+END;
+/
+
+
+=================================
+2.6.2 Policy 생성
+
+Begin 
+dbms_rls.add_policy(
+object_schema => 'HANDSON',
+object_name => 'EVALUATE_T',
+policy_name =>'EVAL_DATAZONE_POLICY',
+Function_schema => 'HANDSON',
+policy_function =>'VPD_GET_DATAZONE',
+Statement_types => 'SELECT,UPDATE,INSERT,DELETE',
+policy_type => DBMS_RLS.CONTEXT_SENSITIVE,
+namespace => 'DATAZONE_CTX',
+attribute=>'DATA_ZONE',
+update_check => TRUE, 
+enable => TRUE);
+end;
+/
+
+2.7. 1 VPD Policy 테스트(컬럼-열 추출 제어 policy 테스트)
+
+conn adminar / welcome1
+SELECT SYS_CONTEXT('datazone_ctx', 'data_zone') DATAZONE FROM DUAL;
+
+DATAZONE
+--------------------------------------------------------------------------------
+AR
+
+select * from handson.evaluate_t;
+
+EMPNO                                FST_EV SND_EV FIN_EV EMP_SOSOK_CD EMP_SB_CD
+------------------------------------ ------ ------ ------ ------------ ------------------
+21-10011                             4      4             AR           MIL
+21-10102                             1      2      2      AR           MIL
+21-10203                             2      2      2      AR           MIL
+21-10044                             3      3      2      AR           MC
+21-15005                             3      3      3      AR           MIL
+21-10106                             1      5             AR           MC
+21-10307                             2      1      1      AR           MIL
+21-10038                             2      2      2      AR           MIL
+21-10009                             1      2      2      AR           MIL
+21-11010                             2      3      3      AR           MIL
+
+10 행이 선택되었습니다.
+
+
+conn adminarmil/welcome1
+SELECT SYS_CONTEXT('datazone_ctx', 'data_zone') DATAZONE FROM DUAL;
+select * from handson.evaluate_t;
+
+
+
+select * from handson.evaluate_t where emp_mil_cd in ('AF','NV','AR');
+
+EMPNO                                FST_EV SND_EV FIN_EV EMP_MIL_CD
+------------------------------------ ------ ------ ------ ------------
+21-10011                             4      4             AR
+21-10102                             1      2      2      AR
+21-10203                             2      2      2      AR
+21-10044                             3      3      2      AR
+21-15005                             3      3      3      AR
+21-10106                             1      5             AR
+21-10307                             2      1      1      AR
+21-10038                             2      2      2      AR
+21-10009                             1      2      2      AR
+21-11010                             2      3      3      AR
+
+select * from handson.evaluate_t where emp_mil_cd = 'AF';
+
+선택된 레코드가 없습니다.
+
+
+2.8 컬럼 Null Masking Policy 테스트
+
+conn handson/handson
+
+exec DBMS_RLS.DROP_POLICY('handson', 'evaluate_t', 'eval_datazone_policy'); 
+
+
+Begin 
+dbms_rls.add_policy(
+object_schema => 'HANDSON',
+object_name => 'EVALUATE_T',
+policy_name =>'EVAL_MASKING_POLICY',
+Function_schema => 'HANDSON',
+policy_function =>'VPD_GET_USERS',
+policy_type => DBMS_RLS.CONTEXT_SENSITIVE,
+namespace => 'DATAZONE_CTX',
+attribute=>'DATA_ZONE',
+update_check => TRUE, 
+enable =>TRUE,
+sec_relevant_cols => 'FST_EV_GRADE,SND_EV_GRADE',
+sec_relevant_cols_opt => DBMS_RLS.ALL_ROWS);
+end;
+/
+
+select * from handson.evaluate_t;
+
+EMPNO                                FST_EV SND_EV FIN_EV EMP_MIL_CD
+------------------------------------ ------ ------ ------ ------------
+21-10011                             4      4             AR
+21-10102                             1      2      2      AR
+21-10203                             2      2      2      AR
+21-10044                             3      3      2      AR
+21-15005                             3      3      3      AR
+21-10106                             1      5             AR
+21-10307                             2      1      1      AR
+21-10038                             2      2      2      AR
+21-10009                             1      2      2      AR
+21-11010                             2      3      3      AR
+21-20301                                                  NV
+21-20002                                           2      NV
+21-20343                                           2      NV
+21-20104                                           2      NV
+21-20235                                           3      NV
+21-21106                                                  NV
+21-20207                                           1      NV
+21-21008                                           2      NV
+21-20459                                           2      NV
+21-20210                                           3      NV
+21-30001                                           2      AF
+21-31102                                           2      AF
+21-33203                                           2      AF
+21-30004                                                  AF
+21-30905                                           1      AF
+21-30806                                                  AF
+21-30047                                           2      AF
+21-30078                                           2      AF
+21-30309                                           3      AF
+21-30010                                           2      AF
+
+30 행이 선택되었습니다.
+
+select * from 
+
+
+
+
+. 기타 control 기능
+
+exec DBMS_RLS.DROP_POLICY('handson', 'evaluate_t', 'eval_datazone_policy'); 
+exec DBMS_RLS.DROP_POLICY('handson', 'evaluate_t', 'EVAL_MASKING_POLICY'); 
+
+
+===== policy group test
+
+EXEC DBMS_SESSION.SET_IDENTIFIER('provider_a');
+
+
+0. create 
+
+conn handson/handson
+0. set client_indetifier 
+
+CREATE OR REPLACE CONTEXT datazone_ctx USING datazone_ctx_pkg;
+
+CREATE OR REPLACE PACKAGE datazone_ctx_pkg IS 
+  PROCEDURE set_datazone;
+ END;
+/
+CREATE OR REPLACE PACKAGE BODY datazone_ctx_pkg IS
+  PROCEDURE set_datazone
+  AS
+    datazone varchar2(20);
+  BEGIN
+     SELECT data_zone INTO datazone FROM handson.account_t
+        WHERE acct_id = SYS_CONTEXT('USERENV', 'SESSION_USER');
+        DBMS_SESSION.SET_CONTEXT('datazone_ctx', 'data_zone', datazone);
+  EXCEPTION
+   WHEN NO_DATA_FOUND THEN NULL;
+  END set_datazone;
+END;
+/
+
+CREATE or REPLACE TRIGGER set_datazone_ctx_trig AFTER LOGON ON DATABASE
+ BEGIN
+    handson.datazone_ctx_pkg.set_datazone;
+  EXCEPTION
+  WHEN OTHERS THEN
+   RAISE_APPLICATION_ERROR(
+    -20000, 'Trigger handson.datazone_ctx_pkg.set_datazone violation. Login denied.');
+ END;
+/
+
+
+1. create policy group
+
+BEGIN
+ DBMS_RLS.CREATE_POLICY_GROUP(
+ object_schema   => 'handson',
+ object_name     => 'evaluate_t',
+ policy_group    => 'mil_group');
+END;
+/
+
+BEGIN
+ DBMS_RLS.CREATE_POLICY_GROUP(
+ object_schema   => 'handson',
+ object_name     => 'evaluate_t',
+ policy_group    => 'sb_group');
+END;
+/
+
+2. create function for to control the ploicy group
+
+CREATE OR REPLACE FUNCTION vpd_function_mil_group 
+ (schema in varchar2, tab in varchar2) return varchar2 as 
+  predicate  varchar2(8) default NULL;
+  BEGIN
+   IF LOWER(SYS_CONTEXT('group_datazone_ctx','policy_group')) = 'mil_group' 
+    THEN predicate := 'emp_sosok_cd = SYS_CONTEXT(''datazone_ctx'', ''data_zone'')';
+   ELSE NULL;
+  END IF;
+  RETURN predicate;
+END;
+/
+
+CREATE OR REPLACE FUNCTION vpd_function_sb_group 
+ (schema in varchar2, tab in varchar2) return varchar2 as 
+  predicate  varchar2(8) default NULL;
+  BEGIN
+   IF LOWER(SYS_CONTEXT('group_datazone_ctx','policy_group')) = 'sb_group' 
+    THEN predicate := 'em_sb_cd = SYS_CONTEXT(''datazone_ctx'', ''data_zone'')';
+   ELSE NULL;
+  END IF;
+  RETURN predicate;
+END;
+/
+
+
+3. Create Driving Application Context
+
+CREATE OR REPLACE CONTEXT group_datazone_ctx USING group_datazone_ctx_pkg;
+
+CREATE OR REPLACE PACKAGE group_datazone_ctx_pkg IS 
+  PROCEDURE set_group_context (
+  policy_group varchar2 default NULL);
+ END;
+/
+CREATE OR REPLACE PACKAGE BODY group_datazone_ctx_pkg IS
+  PROCEDURE set_group_context (
+  policy_group varchar2 default NULL) IS
+  BEGIN
+ 	CASE UPPER(SYS_CONTEXT('datazone_ctx', 'data_zone'))
+ 	  WHEN 'AR' THEN
+     	  DBMS_SESSION.SET_CONTEXT('group_datazone_ctx','policy_group','mil_group');
+      WHEN 'NV' THEN
+     	  DBMS_SESSION.SET_CONTEXT('group_datazone_ctx','policy_group','mil_group');	  
+      WHEN 'AF' THEN
+     	  DBMS_SESSION.SET_CONTEXT('group_datazone_ctx','policy_group','mil_group');
+      WHEN 'ARMIL' THEN
+     	  DBMS_SESSION.SET_CONTEXT('group_datazone_ctx','policy_group','sb_group');
+      WHEN 'ARMC' THEN
+     	  DBMS_SESSION.SET_CONTEXT('group_datazone_ctx','policy_group','sb_group');    
+	END CASE;
+  END set_group_context;
+END;
+/
+
+
+
+CREATE or REPLACE TRIGGER set_group_datazone_ctx_trig AFTER LOGON ON DATABASE
+ BEGIN
+    HANDSON.group_datazone_ctx_pkg.set_group_context;
+  EXCEPTION
+  WHEN OTHERS THEN
+   RAISE_APPLICATION_ERROR(
+    -20000, 'Trigger handson.group_datazone_ctx_pkg.set_group_context violation. Login denied.');
+ END;
+/
+
+grant execute on group_datazone_ctx_pkg to adminar;
+grant execute on group_datazone_ctx_pkg to adminarad;
+grant execute on group_datazone_ctx_pkg to adminarmc;
+
+exec HANDSON.group_datazone_ctx_pkg.set_group_context;
+
+BEGIN
+ DBMS_RLS.ADD_POLICY_CONTEXT(
+ object_schema  =>'handson',
+ object_name    =>'evaluate_t',
+ namespace      =>'datazone_ctx',
+ attribute      =>'policy_group');
+END;
+/
+
+GRANT EXECUTE ON datazone_ctx_pkg TO adminar;
+GRANT EXECUTE ON datazone_ctx_pkg TO adminarad;
+
+4. Add function to policy group
+
+
+BEGIN 
+ DBMS_RLS.ADD_GROUPED_POLICY(
+ object_schema         => 'handson',
+ object_name           => 'evaluate_t',
+ policy_group          => 'mil_group',
+ policy_name           => 'filter_mil_lolicy',
+ function_schema       => 'handson',
+ policy_function       => 'vpd_function_mil_group',
+ statement_types       => 'select',
+ policy_type           => DBMS_RLS.CONTEXT_SENSITIVE,
+ sec_relevant_cols     => 'fst_ev_grade, snd_ev_grade, fin_ev_grade',
+ sec_relevant_cols_opt => DBMS_RLS.ALL_ROWS,
+ namespace             => 'datazone_ctx',
+ attribute             => 'policy_group');
+END;
+/
+
+BEGIN 
+ DBMS_RLS.ADD_GROUPED_POLICY(
+ object_schema         => 'handson',
+ object_name           => 'evaluate_t',
+ policy_group          => 'sb_group',
+ policy_name           => 'filter_sb_policy',
+ function_schema       => 'handson',
+ policy_function       => 'vpd_function_sb_group',
+ statement_types       => 'select',
+ policy_type           => DBMS_RLS.CONTEXT_SENSITIVE,
+ sec_relevant_cols     => 'fst_ev_grade, snd_ev_grade, fin_ev_grade',
+ sec_relevant_cols_opt => DBMS_RLS.ALL_ROWS,
+ namespace             => 'datazone_ctx',
+ attribute             => 'policy_group');
+END;
+/
+
+exec DBMS_RLS.DELETE_POLICY_GROUP('handson','evaluate_t','mil_group')
+exec DBMS_RLS.DELETE_POLICY_GROUP('handson','evaluate_t','sb_group')
+
+
+exec DBMS_RLS.DROP_GROUPED_POLICY('handson','evaluate_t','mil_group','filter_mc_policy')
+exec DBMS_RLS.DROP_GROUPED_POLICY('handson','evaluate_t','sb_group','filter_sb_policy')
